@@ -149,11 +149,16 @@ func (p *LLLiveMediaPlaylist) Render() string {
 		fmt.Fprintf(&buf, "#EXT-X-MAP:URI=\"%s\"\n", p.mapURI)
 	}
 
-	for _, seg := range segs {
+	// Spec (draft-pantos-hls-rfc8216bis-22 §9.11): EXT-X-PART tags must be
+	// omitted from all but the most recently completed segment.
+	lastIdx := len(segs) - 1
+	for i, seg := range segs {
 		fmt.Fprintf(&buf, "#EXT-X-PROGRAM-DATE-TIME:%s\n",
 			seg.WallClock.UTC().Format("2006-01-02T15:04:05.000Z"))
-		for _, part := range seg.Parts {
-			fmt.Fprintf(&buf, "%s", renderPart(part))
+		if i == lastIdx {
+			for _, part := range seg.Parts {
+				fmt.Fprintf(&buf, "%s", renderPart(part))
+			}
 		}
 		fmt.Fprintf(&buf, "#EXTINF:%.6f,\n", float64(seg.DurationMs)/1000.0)
 		fmt.Fprintf(&buf, "%s\n", seg.URI)

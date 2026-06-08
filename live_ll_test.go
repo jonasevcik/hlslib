@@ -140,6 +140,27 @@ func TestLLLiveMediaPlaylistMediaSequence(t *testing.T) {
 	assert.Len(t, p.Segments(), 1)
 }
 
+func TestLLLiveMediaPlaylistRender_EarlierSegmentsHaveNoParts(t *testing.T) {
+	p := newLLPlaylist()
+	now := time.Date(2026, 6, 7, 10, 0, 0, 0, time.UTC)
+
+	p.AddPart(LivePartByteRange{URI: "seg0.m4s", ByteOffset: 0, ByteLength: 100, DurationMs: 333, Independent: true}, now)
+	p.CommitSegment(0, now, 1000, 100, "seg0.m4s")
+
+	next := now.Add(time.Second)
+	p.AddPart(LivePartByteRange{URI: "seg1.m4s", ByteOffset: 0, ByteLength: 110, DurationMs: 333, Independent: true}, next)
+	p.CommitSegment(1000, next, 1000, 110, "seg1.m4s")
+
+	out := p.Render()
+
+	// Both segments must be present
+	assert.Equal(t, 2, strings.Count(out, "#EXTINF:"))
+	// Only the last segment (seg1) retains its EXT-X-PART tag
+	assert.Equal(t, 1, strings.Count(out, "#EXT-X-PART:"))
+	assert.Contains(t, out, `URI="seg1.m4s"`)
+	assert.NotContains(t, out, `URI="seg0.m4s",`)
+}
+
 func TestLLLiveMediaPlaylistServerControlValues(t *testing.T) {
 	// partTargetMs=500 → PART-HOLD-BACK = 3 * 0.5 = 1.5
 	p := NewLLLiveMediaPlaylist(7, 500, "")
