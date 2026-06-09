@@ -22,7 +22,7 @@ func TestLLLiveMediaPlaylistRender_Empty(t *testing.T) {
 	assert.Contains(t, out, "#EXT-X-MEDIA-SEQUENCE:0")
 	assert.Contains(t, out, "#EXT-X-PART-INF:PART-TARGET=0.333000")
 	assert.Contains(t, out, "CAN-BLOCK-RELOAD=YES")
-	assert.Contains(t, out, "PART-HOLD-BACK=0.999000")
+	assert.Contains(t, out, "PART-HOLD-BACK=1.000000")
 	assert.Contains(t, out, "HOLD-BACK=21")
 	assert.Contains(t, out, `#EXT-X-MAP:URI="../media/1080p/init.mp4"`)
 	assert.NotContains(t, out, "#EXTINF")
@@ -43,7 +43,7 @@ func TestLLLiveMediaPlaylistRender_PartInProgressOnly(t *testing.T) {
 	out := p.Render()
 
 	assert.Contains(t, out, "#EXT-X-PROGRAM-DATE-TIME:2026-06-07T10:00:00.000Z")
-	assert.Contains(t, out, `#EXT-X-PART:DURATION=0.333000,URI="chunk-1080p-0.m4s",BYTERANGE=200000@0,INDEPENDENT=YES`)
+	assert.Contains(t, out, `#EXT-X-PART:DURATION=0.333000,URI="chunk-1080p-0.m4s",BYTERANGE="200000@0",INDEPENDENT=YES`)
 	assert.Contains(t, out, `#EXT-X-PRELOAD-HINT:TYPE=PART,URI="chunk-1080p-0.m4s",BYTERANGE-START=200000`)
 	assert.NotContains(t, out, "#EXTINF")
 }
@@ -65,12 +65,12 @@ func TestLLLiveMediaPlaylistRender_CompletedSegmentWithParts(t *testing.T) {
 	extinfIdx := strings.Index(out, "#EXTINF:")
 	require.True(t, partIdx < extinfIdx, "EXT-X-PART must appear before #EXTINF")
 
-	assert.Contains(t, out, `#EXT-X-PART:DURATION=0.333000,URI="chunk-1080p-0.m4s",BYTERANGE=200000@0,INDEPENDENT=YES`)
-	assert.Contains(t, out, `#EXT-X-PART:DURATION=0.333000,URI="chunk-1080p-0.m4s",BYTERANGE=215000@200000`)
-	assert.Contains(t, out, `#EXT-X-PART:DURATION=0.334000,URI="chunk-1080p-0.m4s",BYTERANGE=205000@415000`)
+	assert.Contains(t, out, `#EXT-X-PART:DURATION=0.333000,URI="chunk-1080p-0.m4s",BYTERANGE="200000@0",INDEPENDENT=YES`)
+	assert.Contains(t, out, `#EXT-X-PART:DURATION=0.333000,URI="chunk-1080p-0.m4s",BYTERANGE="215000@200000"`)
+	assert.Contains(t, out, `#EXT-X-PART:DURATION=0.334000,URI="chunk-1080p-0.m4s",BYTERANGE="205000@415000"`)
 	// Only the first part carries INDEPENDENT=YES; the other two must not.
-	assert.NotContains(t, out, `BYTERANGE=215000@200000,INDEPENDENT=YES`)
-	assert.NotContains(t, out, `BYTERANGE=205000@415000,INDEPENDENT=YES`)
+	assert.NotContains(t, out, `BYTERANGE="215000@200000",INDEPENDENT=YES`)
+	assert.NotContains(t, out, `BYTERANGE="205000@415000",INDEPENDENT=YES`)
 	assert.Contains(t, out, "#EXTINF:1.000000,")
 	assert.Contains(t, out, "chunk-1080p-0.m4s\n")
 	// No pending parts → no preload hint
@@ -98,7 +98,7 @@ func TestLLLiveMediaPlaylistRender_InProgressAfterCompleted(t *testing.T) {
 
 	// In-progress: EXT-X-PART without EXTINF, with preload hint
 	assert.Contains(t, out, "#EXT-X-PROGRAM-DATE-TIME:2026-06-07T10:00:06.000Z")
-	assert.Contains(t, out, `#EXT-X-PART:DURATION=0.333000,URI="chunk-1080p-540000.m4s",BYTERANGE=202000@0,INDEPENDENT=YES`)
+	assert.Contains(t, out, `#EXT-X-PART:DURATION=0.333000,URI="chunk-1080p-540000.m4s",BYTERANGE="202000@0",INDEPENDENT=YES`)
 	assert.Contains(t, out, `#EXT-X-PRELOAD-HINT:TYPE=PART,URI="chunk-1080p-540000.m4s",BYTERANGE-START=202000`)
 
 	// In-progress EXTINF must not appear
@@ -162,10 +162,10 @@ func TestLLLiveMediaPlaylistRender_EarlierSegmentsHaveNoParts(t *testing.T) {
 }
 
 func TestLLLiveMediaPlaylistServerControlValues(t *testing.T) {
-	// partTargetMs=500 → PART-HOLD-BACK = 3 * 0.5 = 1.5
+	// partTargetMs=500 → PART-HOLD-BACK = 3 * 0.5 + 0.001 = 1.501
 	p := NewLLLiveMediaPlaylist(7, 500, "")
 	out := p.Render()
-	assert.Contains(t, out, "PART-HOLD-BACK=1.500000")
+	assert.Contains(t, out, "PART-HOLD-BACK=1.501000")
 	assert.Contains(t, out, "HOLD-BACK=21")
 }
 

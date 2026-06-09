@@ -134,7 +134,7 @@ func (p *LLLiveMediaPlaylist) Render() string {
 
 	partTargetSec := float64(p.partTargetMs) / 1000.0
 	holdBack := 3 * p.targetDuration
-	partHoldBack := 3.0 * partTargetSec
+	partHoldBack := 3.0*partTargetSec + 0.001 // 1 ms above the 3× minimum avoids FP boundary in validators
 
 	var buf strings.Builder
 	fmt.Fprintf(&buf, "#EXTM3U\n")
@@ -182,7 +182,7 @@ func (p *LLLiveMediaPlaylist) Render() string {
 
 // renderPart renders a single EXT-X-PART line.
 func renderPart(part LivePartByteRange) string {
-	attrs := fmt.Sprintf("DURATION=%.6f,URI=\"%s\",BYTERANGE=%d@%d",
+	attrs := fmt.Sprintf("DURATION=%.6f,URI=\"%s\",BYTERANGE=\"%d@%d\"",
 		float64(part.DurationMs)/1000.0,
 		part.URI,
 		part.ByteLength,
