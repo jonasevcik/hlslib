@@ -21,7 +21,7 @@ func TestLLLiveMediaPlaylistRender_Empty(t *testing.T) {
 	assert.Contains(t, out, "#EXT-X-TARGETDURATION:7")
 	assert.Contains(t, out, "#EXT-X-MEDIA-SEQUENCE:0")
 	assert.Contains(t, out, "#EXT-X-PART-INF:PART-TARGET=0.333000")
-	assert.NotContains(t, out, "CAN-BLOCK-RELOAD")
+	assert.Contains(t, out, "CAN-BLOCK-RELOAD=YES")
 	assert.Contains(t, out, "PART-HOLD-BACK=1.000000")
 	assert.Contains(t, out, "HOLD-BACK=21")
 	assert.Contains(t, out, `#EXT-X-MAP:URI="../media/1080p/init.mp4"`)

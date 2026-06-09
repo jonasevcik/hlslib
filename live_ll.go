@@ -119,6 +119,14 @@ func (p *LLLiveMediaPlaylist) MediaSequence() int {
 	return p.mediaSequence
 }
 
+// CurrentMSN returns the MSN of the in-progress (not-yet-finalized) segment
+// and the number of pending parts committed to it so far (0 if none).
+func (p *LLLiveMediaPlaylist) CurrentMSN() (msn int, pendingPartCount int) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.mediaSequence + len(p.segments), len(p.pendingParts)
+}
+
 // Render produces the M3U8 text for the current window snapshot.
 func (p *LLLiveMediaPlaylist) Render() string {
 	p.mu.Lock()
@@ -142,7 +150,7 @@ func (p *LLLiveMediaPlaylist) Render() string {
 	fmt.Fprintf(&buf, "#EXT-X-TARGETDURATION:%d\n", p.targetDuration)
 	fmt.Fprintf(&buf, "#EXT-X-MEDIA-SEQUENCE:%d\n", seq)
 	fmt.Fprintf(&buf, "#EXT-X-PART-INF:PART-TARGET=%.6f\n", partTargetSec)
-	fmt.Fprintf(&buf, "#EXT-X-SERVER-CONTROL:PART-HOLD-BACK=%.6f,HOLD-BACK=%d\n",
+	fmt.Fprintf(&buf, "#EXT-X-SERVER-CONTROL:CAN-BLOCK-RELOAD=YES,PART-HOLD-BACK=%.6f,HOLD-BACK=%d\n",
 		partHoldBack, holdBack)
 
 	if p.mapURI != "" {
