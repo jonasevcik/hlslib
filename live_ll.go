@@ -137,10 +137,29 @@ func (p *LLLiveMediaPlaylist) CurrentMSN() (msn int, pendingPartCount int) {
 	return p.mediaSequence + len(p.segments), len(p.pendingParts)
 }
 
+// CanSkipCount returns the number of leading segments eligible for EXT-X-SKIP
+// (those whose WallClock is older than 6 × targetDuration seconds, per bis §9.5).
+func (p *LLLiveMediaPlaylist) CanSkipCount() int {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	threshold := time.Now().Add(-time.Duration(6*p.targetDuration) * time.Second)
+	n := 0
+	for _, seg := range p.segments {
+		if seg.WallClock.Before(threshold) {
+			n++
+		} else {
+			break
+		}
+	}
+	return n
+}
+
 // Render produces the M3U8 text for the current window snapshot.
+// skipSegments > 0 produces a Playlist Delta Update (bis §9.5): the first
+// skipSegments entries are replaced with EXT-X-SKIP. Pass 0 for a full playlist.
 // reports contains one RenditionReport per sibling rendition; pass nil when
 // there are no siblings or reports are unavailable.
-func (p *LLLiveMediaPlaylist) Render(reports []RenditionReport) string {
+func (p *LLLiveMediaPlaylist) Render(skipSegments int, reports []RenditionReport) string {
 	p.mu.Lock()
 	segs := make([]LLLiveSegment, len(p.segments))
 	copy(segs, p.segments)
@@ -155,6 +174,7 @@ func (p *LLLiveMediaPlaylist) Render(reports []RenditionReport) string {
 	partTargetSec := float64(p.partTargetMs) / 1000.0
 	holdBack := 3 * p.targetDuration
 	partHoldBack := 3.0*partTargetSec + 0.001 // 1 ms above the 3× minimum avoids FP boundary in validators
+	canSkipUntil := float64(6 * p.targetDuration)
 
 	var buf strings.Builder
 	fmt.Fprintf(&buf, "#EXTM3U\n")
@@ -162,11 +182,20 @@ func (p *LLLiveMediaPlaylist) Render(reports []RenditionReport) string {
 	fmt.Fprintf(&buf, "#EXT-X-TARGETDURATION:%d\n", p.targetDuration)
 	fmt.Fprintf(&buf, "#EXT-X-MEDIA-SEQUENCE:%d\n", seq)
 	fmt.Fprintf(&buf, "#EXT-X-PART-INF:PART-TARGET=%.6f\n", partTargetSec)
-	fmt.Fprintf(&buf, "#EXT-X-SERVER-CONTROL:CAN-BLOCK-RELOAD=YES,PART-HOLD-BACK=%.6f,HOLD-BACK=%d\n",
-		partHoldBack, holdBack)
+	fmt.Fprintf(&buf, "#EXT-X-SERVER-CONTROL:CAN-BLOCK-RELOAD=YES,CAN-SKIP-UNTIL=%.6f,PART-HOLD-BACK=%.6f,HOLD-BACK=%d\n",
+		canSkipUntil, partHoldBack, holdBack)
 
 	if p.mapURI != "" {
 		fmt.Fprintf(&buf, "#EXT-X-MAP:URI=\"%s\"\n", p.mapURI)
+	}
+
+	// Playlist Delta Update: replace leading segments with EXT-X-SKIP (bis §9.5).
+	if skipSegments > 0 {
+		if skipSegments > len(segs) {
+			skipSegments = len(segs)
+		}
+		fmt.Fprintf(&buf, "#EXT-X-SKIP:SKIPPED-SEGMENTS=%d\n", skipSegments)
+		segs = segs[skipSegments:]
 	}
 
 	// Spec (draft-pantos-hls-rfc8216bis-22 §9.11): EXT-X-PART tags must be

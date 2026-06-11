@@ -1,6 +1,7 @@
 package hls
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -15,7 +16,7 @@ func newLLPlaylist() *LLLiveMediaPlaylist {
 
 func TestLLLiveMediaPlaylistRender_Empty(t *testing.T) {
 	p := newLLPlaylist()
-	out := p.Render(nil)
+	out := p.Render(0, nil)
 
 	assert.Contains(t, out, "#EXT-X-VERSION:9")
 	assert.Contains(t, out, "#EXT-X-TARGETDURATION:7")
@@ -40,7 +41,7 @@ func TestLLLiveMediaPlaylistRender_PartInProgressOnly(t *testing.T) {
 	}, now)
 	p.SetPreloadHint("chunk-1080p-0.m4s", 200000)
 
-	out := p.Render(nil)
+	out := p.Render(0, nil)
 
 	assert.Contains(t, out, "#EXT-X-PROGRAM-DATE-TIME:2026-06-07T10:00:00.000Z")
 	assert.Contains(t, out, `#EXT-X-PART:DURATION=0.333000,URI="chunk-1080p-0.m4s",BYTERANGE="200000@0",INDEPENDENT=YES`)
@@ -58,7 +59,7 @@ func TestLLLiveMediaPlaylistRender_CompletedSegmentWithParts(t *testing.T) {
 	p.AddPart(LivePartByteRange{URI: "chunk-1080p-0.m4s", ByteOffset: 415000, ByteLength: 205000, DurationMs: 334, Independent: false}, now)
 	p.CommitSegment(0, now, 1000, 620000, "chunk-1080p-0.m4s")
 
-	out := p.Render(nil)
+	out := p.Render(0, nil)
 
 	// Parts appear before EXTINF
 	partIdx := strings.Index(out, "#EXT-X-PART:")
@@ -90,7 +91,7 @@ func TestLLLiveMediaPlaylistRender_InProgressAfterCompleted(t *testing.T) {
 	p.AddPart(LivePartByteRange{URI: "chunk-1080p-540000.m4s", ByteOffset: 0, ByteLength: 202000, DurationMs: 333, Independent: true}, next)
 	p.SetPreloadHint("chunk-1080p-540000.m4s", 202000)
 
-	out := p.Render(nil)
+	out := p.Render(0, nil)
 
 	// First segment: has EXTINF
 	assert.Contains(t, out, "#EXTINF:6.000000,")
@@ -110,7 +111,7 @@ func TestLLLiveMediaPlaylistRender_INDEPENDENT_YES(t *testing.T) {
 	now := time.Now()
 	p.AddPart(LivePartByteRange{URI: "seg.m4s", ByteOffset: 0, ByteLength: 100, DurationMs: 333, Independent: true}, now)
 	p.AddPart(LivePartByteRange{URI: "seg.m4s", ByteOffset: 100, ByteLength: 100, DurationMs: 333, Independent: false}, now)
-	out := p.Render(nil)
+	out := p.Render(0, nil)
 
 	assert.Contains(t, out, "INDEPENDENT=YES")
 	// second part must NOT have INDEPENDENT=YES
@@ -151,7 +152,7 @@ func TestLLLiveMediaPlaylistRender_EarlierSegmentsHaveNoParts(t *testing.T) {
 	p.AddPart(LivePartByteRange{URI: "seg1.m4s", ByteOffset: 0, ByteLength: 110, DurationMs: 333, Independent: true}, next)
 	p.CommitSegment(1000, next, 1000, 110, "seg1.m4s")
 
-	out := p.Render(nil)
+	out := p.Render(0, nil)
 
 	// Both segments must be present
 	assert.Equal(t, 2, strings.Count(out, "#EXTINF:"))
@@ -164,14 +165,14 @@ func TestLLLiveMediaPlaylistRender_EarlierSegmentsHaveNoParts(t *testing.T) {
 func TestLLLiveMediaPlaylistServerControlValues(t *testing.T) {
 	// partTargetMs=500 → PART-HOLD-BACK = 3 * 0.5 + 0.001 = 1.501
 	p := NewLLLiveMediaPlaylist(7, 500, "")
-	out := p.Render(nil)
+	out := p.Render(0, nil)
 	assert.Contains(t, out, "PART-HOLD-BACK=1.501000")
 	assert.Contains(t, out, "HOLD-BACK=21")
 }
 
 func TestLLLiveMediaPlaylistPartTargetFormatting(t *testing.T) {
 	p := NewLLLiveMediaPlaylist(7, 200, "")
-	out := p.Render(nil)
+	out := p.Render(0, nil)
 	// 200ms = 0.200000
 	assert.Contains(t, out, "PART-TARGET=0.200000")
 }
@@ -179,7 +180,7 @@ func TestLLLiveMediaPlaylistPartTargetFormatting(t *testing.T) {
 func TestLLLiveMediaPlaylistNoEndList(t *testing.T) {
 	p := newLLPlaylist()
 	p.CommitSegment(0, time.Now(), 6000, 100, "seg.m4s")
-	assert.NotContains(t, p.Render(nil), "#EXT-X-ENDLIST")
+	assert.NotContains(t, p.Render(0, nil), "#EXT-X-ENDLIST")
 }
 
 func TestLLLiveMediaPlaylistCommitClearsPendingState(t *testing.T) {
@@ -189,7 +190,7 @@ func TestLLLiveMediaPlaylistCommitClearsPendingState(t *testing.T) {
 	p.SetPreloadHint("seg.m4s", 100)
 	p.CommitSegment(0, now, 6000, 100, "seg.m4s")
 
-	out := p.Render(nil)
+	out := p.Render(0, nil)
 	// After commit, no pending parts and no preload hint
 	assert.Equal(t, 1, strings.Count(out, "#EXT-X-PART:"))
 	assert.NotContains(t, out, "#EXT-X-PRELOAD-HINT")
@@ -198,7 +199,7 @@ func TestLLLiveMediaPlaylistCommitClearsPendingState(t *testing.T) {
 func TestLLLiveMediaPlaylistRender_RenditionReports_NoReports(t *testing.T) {
 	p := newLLPlaylist()
 	p.CommitSegment(0, time.Now(), 6000, 100, "seg.m4s")
-	out := p.Render(nil)
+	out := p.Render(0, nil)
 	assert.NotContains(t, out, "#EXT-X-RENDITION-REPORT")
 }
 
@@ -209,7 +210,7 @@ func TestLLLiveMediaPlaylistRender_RenditionReports_NonLL(t *testing.T) {
 	reports := []RenditionReport{
 		{URI: "audio_en.m3u8", LastMSN: 5, LastPart: -1},
 	}
-	out := p.Render(reports)
+	out := p.Render(0, reports)
 	assert.Contains(t, out, `#EXT-X-RENDITION-REPORT:URI="audio_en.m3u8",LAST-MSN=5`)
 	assert.NotContains(t, out, "LAST-PART")
 }
@@ -221,7 +222,7 @@ func TestLLLiveMediaPlaylistRender_RenditionReports_LLSibling(t *testing.T) {
 	reports := []RenditionReport{
 		{URI: "video_720p.m3u8", LastMSN: 7, LastPart: 2},
 	}
-	out := p.Render(reports)
+	out := p.Render(0, reports)
 	assert.Contains(t, out, `#EXT-X-RENDITION-REPORT:URI="video_720p.m3u8",LAST-MSN=7,LAST-PART=2`)
 }
 
@@ -235,7 +236,7 @@ func TestLLLiveMediaPlaylistRender_RenditionReports_MultipleAndOrdering(t *testi
 		{URI: "video_720p.m3u8", LastMSN: 3, LastPart: 1},
 		{URI: "audio_en.m3u8", LastMSN: 3, LastPart: -1},
 	}
-	out := p.Render(reports)
+	out := p.Render(0, reports)
 
 	hintIdx := strings.Index(out, "#EXT-X-PRELOAD-HINT")
 	report1Idx := strings.Index(out, `URI="video_720p.m3u8"`)
@@ -244,4 +245,72 @@ func TestLLLiveMediaPlaylistRender_RenditionReports_MultipleAndOrdering(t *testi
 	assert.True(t, report1Idx > hintIdx, "rendition reports must appear after EXT-X-PRELOAD-HINT")
 	assert.True(t, report2Idx > hintIdx, "rendition reports must appear after EXT-X-PRELOAD-HINT")
 	assert.True(t, report1Idx < report2Idx, "reports appear in provided order")
+}
+
+func TestLLLiveMediaPlaylistServerControl_AdvertisesCanSkipUntil(t *testing.T) {
+	// targetDuration=7 → CAN-SKIP-UNTIL = 42.000000
+	p := newLLPlaylist()
+	out := p.Render(0, nil)
+	assert.Contains(t, out, "CAN-SKIP-UNTIL=42.000000")
+}
+
+func TestLLLiveMediaPlaylistRender_DeltaUpdate_SkipsLeadingSegments(t *testing.T) {
+	p := newLLPlaylist()
+	now := time.Date(2026, 6, 7, 10, 0, 0, 0, time.UTC)
+	for i := range 4 {
+		wc := now.Add(time.Duration(i) * 6 * time.Second)
+		p.CommitSegment(int64(i*540000), wc, 6000, 100000, fmt.Sprintf("seg%d.m4s", i))
+	}
+
+	out := p.Render(2, nil)
+
+	assert.Contains(t, out, "#EXT-X-SKIP:SKIPPED-SEGMENTS=2")
+	// EXT-X-MEDIA-SEQUENCE still reflects original window start
+	assert.Contains(t, out, "#EXT-X-MEDIA-SEQUENCE:0")
+	// First two segments must be absent
+	assert.NotContains(t, out, "seg0.m4s")
+	assert.NotContains(t, out, "seg1.m4s")
+	// Remaining segments must be present
+	assert.Contains(t, out, "seg2.m4s")
+	assert.Contains(t, out, "seg3.m4s")
+	// Skip tag must appear before the first shown segment
+	skipIdx := strings.Index(out, "#EXT-X-SKIP:")
+	seg2Idx := strings.Index(out, "seg2.m4s")
+	assert.True(t, skipIdx < seg2Idx, "EXT-X-SKIP must appear before first shown segment")
+}
+
+func TestLLLiveMediaPlaylistRender_DeltaUpdate_SkipClampsToWindowSize(t *testing.T) {
+	p := newLLPlaylist()
+	p.CommitSegment(0, time.Now(), 6000, 100000, "seg0.m4s")
+
+	// Requesting more skips than segments available must clamp to window size.
+	out := p.Render(10, nil)
+
+	assert.Contains(t, out, "#EXT-X-SKIP:SKIPPED-SEGMENTS=1")
+	assert.NotContains(t, out, "seg0.m4s")
+}
+
+func TestLLLiveMediaPlaylistRender_DeltaUpdate_ZeroSkipIsFullPlaylist(t *testing.T) {
+	p := newLLPlaylist()
+	p.CommitSegment(0, time.Now(), 6000, 100000, "seg0.m4s")
+
+	out := p.Render(0, nil)
+
+	assert.NotContains(t, out, "#EXT-X-SKIP")
+	assert.Contains(t, out, "seg0.m4s")
+}
+
+func TestCanSkipCount(t *testing.T) {
+	p := newLLPlaylist() // targetDuration=7 → canSkipUntil = 42s
+	// 3 old segments (>42s ago), 2 recent segments
+	old := time.Now().Add(-60 * time.Second)
+	recent := time.Now().Add(-5 * time.Second)
+	for i := range 3 {
+		p.CommitSegment(int64(i), old.Add(time.Duration(i)*6*time.Second), 6000, 100, "seg.m4s")
+	}
+	for i := range 2 {
+		p.CommitSegment(int64(3+i), recent.Add(time.Duration(i)*6*time.Second), 6000, 100, "seg.m4s")
+	}
+
+	assert.Equal(t, 3, p.CanSkipCount())
 }
