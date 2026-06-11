@@ -127,9 +127,6 @@ func NewMasterPlaylist(variants []Variant, independentSegments bool) *MasterPlay
 func NewMasterPlaylistWithAudio(variants []Variant, audioRenditions []AudioRendition, independentSegments bool) *MasterPlaylist {
 	pl := NewMasterPlaylist(variants, independentSegments)
 	pl.AudioRenditions = audioRenditions
-	if len(audioRenditions) > 0 {
-		pl.Version = 7
-	}
 	return pl
 }
 

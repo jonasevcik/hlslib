@@ -21,8 +21,8 @@ func (v *HLSValidator) ValidateMediaPlaylist(p *MediaPlaylist) error {
 	if p.TargetDuration < 1 {
 		return fmt.Errorf("target duration must be >= 1")
 	}
-	if p.PlaylistType != "VOD" && p.PlaylistType != "EVENT" && p.PlaylistType != "SIMPLE" {
-		return fmt.Errorf("invalid playlist type: %s", p.PlaylistType)
+	if p.PlaylistType != "VOD" && p.PlaylistType != "EVENT" {
+		return fmt.Errorf("invalid playlist type %q: must be VOD or EVENT (RFC 8216 §4.3.3.5)", p.PlaylistType)
 	}
 	if p.MapURI == "" {
 		return fmt.Errorf("EXT-X-MAP URI is required for fMP4")

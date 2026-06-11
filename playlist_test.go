@@ -395,7 +395,7 @@ func TestMasterPlaylistWithAudioGroup(t *testing.T) {
 	pl := NewMasterPlaylistWithAudio(variants, audioRenditions, true)
 	output := pl.Render()
 
-	assert.Contains(t, output, "#EXT-X-VERSION:7")
+	assert.Contains(t, output, "#EXT-X-VERSION:6")
 	assert.Contains(t, output, `#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="audio-aac",NAME="English"`)
 	assert.Contains(t, output, `LANGUAGE="en"`)
 	assert.Contains(t, output, `DEFAULT=YES`)
