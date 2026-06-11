@@ -1,11 +1,23 @@
 # hlslib
 
+[![CI](https://github.com/jonasevcik/hlslib/actions/workflows/ci.yml/badge.svg)](https://github.com/jonasevcik/hlslib/actions/workflows/ci.yml)
+[![Go Reference](https://pkg.go.dev/badge/github.com/jonasevcik/hlslib.svg)](https://pkg.go.dev/github.com/jonasevcik/hlslib)
+[![Go Report Card](https://goreportcard.com/badge/github.com/jonasevcik/hlslib)](https://goreportcard.com/report/github.com/jonasevcik/hlslib)
+
 Go library for generating HLS playlists. Covers VOD, standard live, and Low-Latency HLS (LL-HLS), plus bandwidth calculation and structural validation.
 
 ## Install
 
+Requires Go 1.24+.
+
 ```sh
 go get github.com/jonasevcik/hlslib
+```
+
+The package name is `hls` (not `hlslib`), so no import alias is needed:
+
+```go
+import "github.com/jonasevcik/hlslib"
 ```
 
 ## Types
@@ -16,6 +28,8 @@ go get github.com/jonasevcik/hlslib
 | `MasterPlaylist` | Master playlist with variants and optional audio groups |
 | `LiveMediaPlaylist` | Live sliding-window playlist (standard HLS) |
 | `LLLiveMediaPlaylist` | Live sliding-window playlist (LL-HLS, EXT-X-PART) |
+
+`LiveMediaPlaylist` and `LLLiveMediaPlaylist` are safe for concurrent use from multiple goroutines. Other types are not.
 
 ## Usage
 
