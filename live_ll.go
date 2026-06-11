@@ -7,6 +7,16 @@ import (
 	"time"
 )
 
+// RenditionReport carries the last-known state of a sibling rendition for
+// EXT-X-RENDITION-REPORT (RFC 8216bis §11.2). Include one entry per rendition
+// that is not the one being rendered. LastPart < 0 omits LAST-PART (use for
+// non-LL renditions that have no partial segments).
+type RenditionReport struct {
+	URI      string // relative playlist URI
+	LastMSN  int    // last known Media Sequence Number
+	LastPart int    // last known part index; -1 → omit LAST-PART
+}
+
 // LivePartByteRange is one partial segment described as a byte range within its parent segment file.
 type LivePartByteRange struct {
 	URI         string // same URI as the parent segment
@@ -128,7 +138,9 @@ func (p *LLLiveMediaPlaylist) CurrentMSN() (msn int, pendingPartCount int) {
 }
 
 // Render produces the M3U8 text for the current window snapshot.
-func (p *LLLiveMediaPlaylist) Render() string {
+// reports contains one RenditionReport per sibling rendition; pass nil when
+// there are no siblings or reports are unavailable.
+func (p *LLLiveMediaPlaylist) Render(reports []RenditionReport) string {
 	p.mu.Lock()
 	segs := make([]LLLiveSegment, len(p.segments))
 	copy(segs, p.segments)
@@ -183,6 +195,16 @@ func (p *LLLiveMediaPlaylist) Render() string {
 	if hintURI != "" {
 		fmt.Fprintf(&buf, "#EXT-X-PRELOAD-HINT:TYPE=PART,URI=\"%s\",BYTERANGE-START=%d\n",
 			hintURI, hintByteStart)
+	}
+
+	for _, r := range reports {
+		if r.LastPart >= 0 {
+			fmt.Fprintf(&buf, "#EXT-X-RENDITION-REPORT:URI=\"%s\",LAST-MSN=%d,LAST-PART=%d\n",
+				r.URI, r.LastMSN, r.LastPart)
+		} else {
+			fmt.Fprintf(&buf, "#EXT-X-RENDITION-REPORT:URI=\"%s\",LAST-MSN=%d\n",
+				r.URI, r.LastMSN)
+		}
 	}
 
 	return buf.String()
