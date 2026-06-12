@@ -16,6 +16,12 @@ type LiveSegment struct {
 	URI        string // relative path from the media playlist file
 }
 
+// LLAudioConfig enables LL-HLS conformant headers on a standard (non-partial)
+// audio rendition that accompanies an LL-HLS video stream. When set, Render
+// emits VERSION:9 and EXT-X-SERVER-CONTROL (CAN-BLOCK-RELOAD + HOLD-BACK) per
+// Apple's HLS Authoring Specification for audio-without-parts.
+type LLAudioConfig struct{}
+
 // LiveMediaPlaylist is a live HLS media playlist with a sliding DVR window.
 // It is safe for concurrent use.
 type LiveMediaPlaylist struct {
@@ -25,6 +31,7 @@ type LiveMediaPlaylist struct {
 	mapURI         string
 	segments       []LiveSegment
 	mediaSequence  int // sequence number of the first segment currently in the window
+	llAudio        *LLAudioConfig
 }
 
 // NewLiveMediaPlaylist creates a live media playlist.
@@ -73,22 +80,48 @@ func (p *LiveMediaPlaylist) MediaSequence() int {
 	return p.mediaSequence
 }
 
+// SetLLAudio configures LL-HLS conformant headers for an audio rendition.
+// Call this when the playlist accompanies an LL-HLS video stream.
+func (p *LiveMediaPlaylist) SetLLAudio(cfg *LLAudioConfig) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.llAudio = cfg
+}
+
 // Render produces the M3U8 text for the current window snapshot.
 // There is no EXT-X-ENDLIST — the playlist is a live stream.
 // EXT-X-PROGRAM-DATE-TIME is emitted before every segment.
-func (p *LiveMediaPlaylist) Render() string {
+//
+// reports is optional: when the playlist carries LL-HLS headers (SetLLAudio
+// was called), pass one RenditionReport per sibling rendition so that
+// EXT-X-RENDITION-REPORT tags are emitted. Pass nil when there are no siblings.
+func (p *LiveMediaPlaylist) Render(reports ...RenditionReport) string {
 	p.mu.Lock()
 	segs := make([]LiveSegment, len(p.segments))
 	copy(segs, p.segments)
 	seq := p.mediaSequence
+	llAudio := p.llAudio
 	p.mu.Unlock()
+
+	version := p.version
+	if llAudio != nil {
+		version = 9
+	}
 
 	var buf strings.Builder
 
 	fmt.Fprintf(&buf, "#EXTM3U\n")
-	fmt.Fprintf(&buf, "#EXT-X-VERSION:%d\n", p.version)
+	fmt.Fprintf(&buf, "#EXT-X-VERSION:%d\n", version)
 	fmt.Fprintf(&buf, "#EXT-X-TARGETDURATION:%d\n", p.targetDuration)
 	fmt.Fprintf(&buf, "#EXT-X-MEDIA-SEQUENCE:%d\n", seq)
+
+	if llAudio != nil {
+		// Audio-without-parts spec (Apple HLS Authoring Specification §14.2):
+		// only CAN-BLOCK-RELOAD and HOLD-BACK are required; no EXT-X-PART-INF,
+		// no PART-HOLD-BACK, no CAN-SKIP-UNTIL.
+		holdBack := 3 * p.targetDuration
+		fmt.Fprintf(&buf, "#EXT-X-SERVER-CONTROL:CAN-BLOCK-RELOAD=YES,HOLD-BACK=%d\n", holdBack)
+	}
 
 	if p.mapURI != "" {
 		fmt.Fprintf(&buf, "#EXT-X-MAP:URI=\"%s\"\n", p.mapURI)
@@ -100,6 +133,16 @@ func (p *LiveMediaPlaylist) Render() string {
 		fmt.Fprintf(&buf, "#EXT-X-PROGRAM-DATE-TIME:%s\n", seg.WallClock.UTC().Format("2006-01-02T15:04:05.000Z"))
 		fmt.Fprintf(&buf, "#EXTINF:%.6f,\n", float64(seg.DurationMs)/1000.0)
 		fmt.Fprintf(&buf, "%s\n", seg.URI)
+	}
+
+	for _, r := range reports {
+		if r.LastPart >= 0 {
+			fmt.Fprintf(&buf, "#EXT-X-RENDITION-REPORT:URI=\"%s\",LAST-MSN=%d,LAST-PART=%d\n",
+				r.URI, r.LastMSN, r.LastPart)
+		} else {
+			fmt.Fprintf(&buf, "#EXT-X-RENDITION-REPORT:URI=\"%s\",LAST-MSN=%d\n",
+				r.URI, r.LastMSN)
+		}
 	}
 
 	return buf.String()

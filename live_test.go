@@ -107,3 +107,65 @@ func TestLiveMediaPlaylistEmptyRender(t *testing.T) {
 	assert.Contains(t, output, "#EXT-X-MEDIA-SEQUENCE:0")
 	assert.NotContains(t, output, "#EXTINF")
 }
+
+func TestLiveMediaPlaylistLLAudio_EmitsLLHeaders(t *testing.T) {
+	p := NewLiveMediaPlaylist(7, "../media/audio/init.mp4")
+	p.SetLLAudio(&LLAudioConfig{})
+	p.Add(LiveSegment{WallClock: time.Now(), DurationMs: 6000, URI: "chunk.m4s"})
+
+	out := p.Render()
+
+	assert.Contains(t, out, "#EXT-X-VERSION:9")
+	assert.NotContains(t, out, "#EXT-X-PART-INF")
+	assert.Contains(t, out, "#EXT-X-SERVER-CONTROL:CAN-BLOCK-RELOAD=YES,HOLD-BACK=21")
+	assert.NotContains(t, out, "PART-HOLD-BACK")
+}
+
+func TestLiveMediaPlaylistLLAudio_NoHeadersWithoutConfig(t *testing.T) {
+	p := NewLiveMediaPlaylist(7, "init.mp4")
+	p.Add(LiveSegment{WallClock: time.Now(), DurationMs: 6000, URI: "chunk.m4s"})
+
+	out := p.Render()
+
+	assert.Contains(t, out, "#EXT-X-VERSION:6")
+	assert.NotContains(t, out, "#EXT-X-PART-INF")
+	assert.NotContains(t, out, "#EXT-X-SERVER-CONTROL")
+}
+
+func TestLiveMediaPlaylistLLAudio_TagOrderBeforeMap(t *testing.T) {
+	p := NewLiveMediaPlaylist(7, "init.mp4")
+	p.SetLLAudio(&LLAudioConfig{})
+	p.Add(LiveSegment{WallClock: time.Now(), DurationMs: 6000, URI: "chunk.m4s"})
+
+	out := p.Render()
+
+	// EXT-X-SERVER-CONTROL must appear before EXT-X-MAP
+	serverCtrlIdx := strings.Index(out, "#EXT-X-SERVER-CONTROL")
+	mapIdx := strings.Index(out, "#EXT-X-MAP")
+	assert.Greater(t, mapIdx, serverCtrlIdx, "EXT-X-SERVER-CONTROL must appear before EXT-X-MAP")
+}
+
+func TestLiveMediaPlaylistLLAudio_RenditionReports(t *testing.T) {
+	p := NewLiveMediaPlaylist(7, "init.mp4")
+	p.SetLLAudio(&LLAudioConfig{})
+	p.Add(LiveSegment{WallClock: time.Now(), DurationMs: 6000, URI: "chunk.m4s"})
+
+	reports := []RenditionReport{
+		{URI: "video_1080p.m3u8", LastMSN: 5, LastPart: 3},
+		{URI: "video_720p.m3u8", LastMSN: 5, LastPart: -1},
+	}
+	out := p.Render(reports...)
+
+	assert.Contains(t, out, `#EXT-X-RENDITION-REPORT:URI="video_1080p.m3u8",LAST-MSN=5,LAST-PART=3`)
+	assert.Contains(t, out, `#EXT-X-RENDITION-REPORT:URI="video_720p.m3u8",LAST-MSN=5`)
+	assert.NotContains(t, out, "LAST-PART=-1")
+}
+
+func TestLiveMediaPlaylistLLAudio_NoRenditionReportsWhenNil(t *testing.T) {
+	p := NewLiveMediaPlaylist(7, "init.mp4")
+	p.SetLLAudio(&LLAudioConfig{})
+	p.Add(LiveSegment{WallClock: time.Now(), DurationMs: 6000, URI: "chunk.m4s"})
+
+	out := p.Render()
+	assert.NotContains(t, out, "#EXT-X-RENDITION-REPORT")
+}

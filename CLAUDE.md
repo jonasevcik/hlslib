@@ -42,6 +42,8 @@ A change is complete when:
 
 **`LLLiveMediaPlaylist.Render(skipSegments int, reports []RenditionReport)` signature.** `skipSegments > 0` produces a Playlist Delta Update (bis §9.5) — pass `0` for a full playlist. `reports` carries per-sibling `RenditionReport` entries for `EXT-X-RENDITION-REPORT` (bis §11.2) — pass `nil` when there are no siblings. Both parameters are always required; callers must not call the old zero-arg form.
 
+**`LiveMediaPlaylist.SetLLAudio(&LLAudioConfig{})` for audio-without-parts.** Audio renditions in an LL-HLS presentation carry no partial segments. Call `SetLLAudio` so `Render(reports...)` emits `VERSION:9` and `EXT-X-SERVER-CONTROL:CAN-BLOCK-RELOAD=YES,HOLD-BACK=N` (Apple's spec for audio-without-parts). Do NOT add `EXT-X-PART-INF` or `PART-HOLD-BACK` — the validator rejects those on part-less playlists.
+
 **No new dependencies.** `github.com/stretchr/testify` is the only allowed test dependency. The library itself has zero runtime dependencies.
 
 **No panics in library code.** Return errors. Callers should never see a panic from this package.
