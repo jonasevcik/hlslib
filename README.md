@@ -105,8 +105,24 @@ pl.CommitSegment(900000, segWallClock, 6000, 512_000, "chunk-0-900000.m4s")
 
 pl.Trim(30 * time.Second)
 
-fmt.Print(pl.Render())
+// Rendition reports for sibling playlists (EXT-X-RENDITION-REPORT, bis §11.2).
+// Use nil when rendering the only rendition.
+reports := []hls.RenditionReport{
+    {URI: "audio_en.m3u8", LastMSN: 5, LastPart: -1},   // standard HLS sibling: no LAST-PART
+    {URI: "video_720p.m3u8", LastMSN: 5, LastPart: 2},  // LL-HLS sibling: include LAST-PART
+}
+
+// Full playlist (pass 0 as skipSegments).
+fmt.Print(pl.Render(0, reports))
+
+// Playlist Delta Update: skip segments older than CAN-SKIP-UNTIL (bis §9.5).
+// CanSkipCount returns how many leading segments are eligible.
+if n := pl.CanSkipCount(); n > 0 {
+    fmt.Print(pl.Render(n, reports))
+}
 ```
+
+`EXT-X-SERVER-CONTROL` automatically advertises `CAN-SKIP-UNTIL=6×targetDuration` so clients know delta updates are available.
 
 ### Bandwidth calculation
 
