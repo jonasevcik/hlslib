@@ -50,6 +50,7 @@ type LLLiveMediaPlaylist struct {
 	preloadHintURI       string
 	preloadHintByteStart int64
 	mediaSequence        int
+	ended                bool
 }
 
 // NewLLLiveMediaPlaylist creates an LL-HLS media playlist.
@@ -80,6 +81,17 @@ func (p *LLLiveMediaPlaylist) SetPreloadHint(uri string, byteStart int64) {
 	defer p.mu.Unlock()
 	p.preloadHintURI = uri
 	p.preloadHintByteStart = byteStart
+}
+
+// End marks the playlist as finished. The next Render call will include
+// #EXT-X-ENDLIST and will omit EXT-X-PRELOAD-HINT (RFC 8216 §4.3.3.4).
+// End is idempotent.
+func (p *LLLiveMediaPlaylist) End() {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.ended = true
+	p.preloadHintURI = ""
+	p.preloadHintByteStart = 0
 }
 
 // CommitSegment moves pending parts into a new completed segment and clears pending state.
@@ -169,6 +181,7 @@ func (p *LLLiveMediaPlaylist) Render(skipSegments int, reports []RenditionReport
 	seq := p.mediaSequence
 	hintURI := p.preloadHintURI
 	hintByteStart := p.preloadHintByteStart
+	ended := p.ended
 	p.mu.Unlock()
 
 	partTargetSec := float64(p.partTargetMs) / 1000.0
@@ -213,17 +226,21 @@ func (p *LLLiveMediaPlaylist) Render(skipSegments int, reports []RenditionReport
 		fmt.Fprintf(&buf, "%s\n", seg.URI)
 	}
 
-	// In-progress segment: pending parts + preload hint (no EXTINF yet).
-	if len(pending) > 0 {
-		fmt.Fprintf(&buf, "#EXT-X-PROGRAM-DATE-TIME:%s\n",
-			pendingWall.UTC().Format("2006-01-02T15:04:05.000Z"))
-		for _, part := range pending {
-			fmt.Fprintf(&buf, "%s", renderPart(part))
+	if ended {
+		fmt.Fprintf(&buf, "#EXT-X-ENDLIST\n")
+	} else {
+		// In-progress segment: pending parts + preload hint (no EXTINF yet).
+		if len(pending) > 0 {
+			fmt.Fprintf(&buf, "#EXT-X-PROGRAM-DATE-TIME:%s\n",
+				pendingWall.UTC().Format("2006-01-02T15:04:05.000Z"))
+			for _, part := range pending {
+				fmt.Fprintf(&buf, "%s", renderPart(part))
+			}
 		}
-	}
-	if hintURI != "" {
-		fmt.Fprintf(&buf, "#EXT-X-PRELOAD-HINT:TYPE=PART,URI=\"%s\",BYTERANGE-START=%d\n",
-			hintURI, hintByteStart)
+		if hintURI != "" {
+			fmt.Fprintf(&buf, "#EXT-X-PRELOAD-HINT:TYPE=PART,URI=\"%s\",BYTERANGE-START=%d\n",
+				hintURI, hintByteStart)
+		}
 	}
 
 	for _, r := range reports {

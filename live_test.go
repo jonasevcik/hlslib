@@ -85,6 +85,32 @@ func TestLiveMediaPlaylistNoEndList(t *testing.T) {
 	assert.NotContains(t, p.Render(), "#EXT-X-ENDLIST")
 }
 
+func TestLiveMediaPlaylistEnd_EmitsEndlist(t *testing.T) {
+	p := NewLiveMediaPlaylist(7, "init.mp4")
+	p.Add(LiveSegment{WallClock: time.Now(), DurationMs: 6000, URI: "s.m4s"})
+	p.End()
+	out := p.Render()
+	assert.Contains(t, out, "#EXT-X-ENDLIST")
+	// ENDLIST must appear after the last segment URI.
+	extinf := strings.LastIndex(out, "#EXTINF")
+	endlist := strings.Index(out, "#EXT-X-ENDLIST")
+	assert.Greater(t, endlist, extinf, "#EXT-X-ENDLIST must appear after the last #EXTINF")
+}
+
+func TestLiveMediaPlaylistEnd_IdempotentAndBeforeRenditionReports(t *testing.T) {
+	p := NewLiveMediaPlaylist(7, "init.mp4")
+	p.SetLLAudio(&LLAudioConfig{})
+	p.Add(LiveSegment{WallClock: time.Now(), DurationMs: 6000, URI: "s.m4s"})
+	p.End()
+	p.End() // second call must not panic or duplicate tag
+	reports := []RenditionReport{{URI: "v.m3u8", LastMSN: 1, LastPart: -1}}
+	out := p.Render(reports...)
+	assert.Equal(t, 1, strings.Count(out, "#EXT-X-ENDLIST"), "ENDLIST must appear exactly once")
+	endlistIdx := strings.Index(out, "#EXT-X-ENDLIST")
+	reportIdx := strings.Index(out, "#EXT-X-RENDITION-REPORT")
+	assert.Greater(t, reportIdx, endlistIdx, "#EXT-X-ENDLIST must appear before EXT-X-RENDITION-REPORT")
+}
+
 func TestLiveMediaPlaylistNoPlaylistType(t *testing.T) {
 	p := NewLiveMediaPlaylist(7, "init.mp4")
 	p.Add(LiveSegment{WallClock: time.Now(), DurationMs: 6000, URI: "s.m4s"})

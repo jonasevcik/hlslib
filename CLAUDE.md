@@ -44,6 +44,8 @@ A change is complete when:
 
 **`LiveMediaPlaylist.SetLLAudio(&LLAudioConfig{})` for audio-without-parts.** Audio renditions in an LL-HLS presentation carry no partial segments. Call `SetLLAudio` so `Render(reports...)` emits `VERSION:9` and `EXT-X-SERVER-CONTROL:CAN-BLOCK-RELOAD=YES,HOLD-BACK=N` (Apple's spec for audio-without-parts). Do NOT add `EXT-X-PART-INF` or `PART-HOLD-BACK` — the validator rejects those on part-less playlists.
 
+**`LiveMediaPlaylist.End()` and `LLLiveMediaPlaylist.End()` for graceful stream termination.** Call `End()` once, immediately before the final `Render()`, to emit `#EXT-X-ENDLIST` after the last segment (RFC 8216 §4.3.3.4). `End()` is idempotent. For LL-HLS, `End()` also clears the preload hint — no more parts will arrive. `EXT-X-ENDLIST` must appear after all segment lines and before any `EXT-X-RENDITION-REPORT` lines; tests assert this ordering. Do NOT call `End()` during normal streaming — only on graceful shutdown.
+
 **No new dependencies.** `github.com/stretchr/testify` is the only allowed test dependency. The library itself has zero runtime dependencies.
 
 **No panics in library code.** Return errors. Callers should never see a panic from this package.

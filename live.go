@@ -32,6 +32,7 @@ type LiveMediaPlaylist struct {
 	segments       []LiveSegment
 	mediaSequence  int // sequence number of the first segment currently in the window
 	llAudio        *LLAudioConfig
+	ended          bool
 }
 
 // NewLiveMediaPlaylist creates a live media playlist.
@@ -88,9 +89,18 @@ func (p *LiveMediaPlaylist) SetLLAudio(cfg *LLAudioConfig) {
 	p.llAudio = cfg
 }
 
+// End marks the playlist as finished. The next Render call will include
+// #EXT-X-ENDLIST, signalling to clients that no more segments will be added
+// (RFC 8216 §4.3.3.4). End is idempotent.
+func (p *LiveMediaPlaylist) End() {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.ended = true
+}
+
 // Render produces the M3U8 text for the current window snapshot.
-// There is no EXT-X-ENDLIST — the playlist is a live stream.
 // EXT-X-PROGRAM-DATE-TIME is emitted before every segment.
+// If End has been called, #EXT-X-ENDLIST is appended after the last segment.
 //
 // reports is optional: when the playlist carries LL-HLS headers (SetLLAudio
 // was called), pass one RenditionReport per sibling rendition so that
@@ -101,6 +111,7 @@ func (p *LiveMediaPlaylist) Render(reports ...RenditionReport) string {
 	copy(segs, p.segments)
 	seq := p.mediaSequence
 	llAudio := p.llAudio
+	ended := p.ended
 	p.mu.Unlock()
 
 	version := p.version
@@ -133,6 +144,10 @@ func (p *LiveMediaPlaylist) Render(reports ...RenditionReport) string {
 		fmt.Fprintf(&buf, "#EXT-X-PROGRAM-DATE-TIME:%s\n", seg.WallClock.UTC().Format("2006-01-02T15:04:05.000Z"))
 		fmt.Fprintf(&buf, "#EXTINF:%.6f,\n", float64(seg.DurationMs)/1000.0)
 		fmt.Fprintf(&buf, "%s\n", seg.URI)
+	}
+
+	if ended {
+		fmt.Fprintf(&buf, "#EXT-X-ENDLIST\n")
 	}
 
 	for _, r := range reports {

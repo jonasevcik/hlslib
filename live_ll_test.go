@@ -203,6 +203,36 @@ func TestLLLiveMediaPlaylistRender_RenditionReports_NoReports(t *testing.T) {
 	assert.NotContains(t, out, "#EXT-X-RENDITION-REPORT")
 }
 
+func TestLLLiveMediaPlaylistEnd_EmitsEndlist(t *testing.T) {
+	p := newLLPlaylist()
+	now := time.Now()
+	p.CommitSegment(0, now, 6000, 100000, "seg0.m4s")
+	p.SetPreloadHint("seg1.m4s", 0)
+	p.End()
+	out := p.Render(0, nil)
+
+	assert.Contains(t, out, "#EXT-X-ENDLIST")
+	assert.NotContains(t, out, "#EXT-X-PRELOAD-HINT")
+	// ENDLIST must appear after the last segment URI
+	lastSegIdx := strings.LastIndex(out, "seg0.m4s")
+	endlistIdx := strings.Index(out, "#EXT-X-ENDLIST")
+	assert.Greater(t, endlistIdx, lastSegIdx, "#EXT-X-ENDLIST must appear after the last segment")
+}
+
+func TestLLLiveMediaPlaylistEnd_IdempotentAndBeforeRenditionReports(t *testing.T) {
+	p := newLLPlaylist()
+	p.CommitSegment(0, time.Now(), 6000, 100000, "seg0.m4s")
+	p.End()
+	p.End() // must not panic or duplicate
+	reports := []RenditionReport{{URI: "v.m3u8", LastMSN: 1, LastPart: 0}}
+	out := p.Render(0, reports)
+
+	assert.Equal(t, 1, strings.Count(out, "#EXT-X-ENDLIST"), "ENDLIST must appear exactly once")
+	endlistIdx := strings.Index(out, "#EXT-X-ENDLIST")
+	reportIdx := strings.Index(out, "#EXT-X-RENDITION-REPORT")
+	assert.Greater(t, reportIdx, endlistIdx, "#EXT-X-ENDLIST must appear before EXT-X-RENDITION-REPORT")
+}
+
 func TestLLLiveMediaPlaylistRender_RenditionReports_NonLL(t *testing.T) {
 	// Sibling is a standard live playlist (audio) — no LAST-PART.
 	p := newLLPlaylist()
